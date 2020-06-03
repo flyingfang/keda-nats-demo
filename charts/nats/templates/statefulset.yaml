@@ -1,0 +1,81 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "nats.fullname" . }}
+  labels:
+    app: {{ include "nats.fullname" . }}
+    {{- include "nats.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ include "nats.fullname" . }}
+  replicas: {{ .Values.replicas | default 1 }}
+  # NATS Streaming service name
+  serviceName: {{ include "nats.fullname" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "nats.fullname" . }}
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: stan
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /nats-streaming-server
+          args:
+            - -m=8222
+            - -st=FILE
+            - --dir=/nats-datastore
+            - --cluster_id=stan-demo
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          ports:
+            - containerPort: 8222
+              name: monitor
+            - containerPort: 7777
+              name: metrics
+{{- if .Values.store.volume.enabled }}
+          volumeMounts:
+            - name: {{ include "nats.fullname" . }}-pvc
+              mountPath: /nats-database
+{{- end }}
+        - name: metrics
+          image: {{ .Values.exporter.image }}
+          imagePullPolicy: Always
+          args:
+            - -connz
+            - -routez
+            - -subz
+            - -varz
+            - -channelz
+            - -serverz
+            - http://localhost:8222/
+          ports:
+            - containerPort: 7777
+              name: metrics
+{{- if .Values.store.volume.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: {{ include "nats.fullname" . }}-pvc
+      spec:
+        {{- with .Values.store.volume.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        accessModes:
+        {{- with .Values.store.volume.accessModes }}
+        - {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.store.volume.storageSize }}
+{{- end}}

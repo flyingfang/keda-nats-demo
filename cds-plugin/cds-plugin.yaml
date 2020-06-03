@@ -1,0 +1,305 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: csi-external-runner
+  namespace: kube-system
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: external-runner
+rules:
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch", "update", "create", "patch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "update", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["*"]
+    verbs: ["create", "get", "list", "watch", "update", "patch"]
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["*"]
+    verbs: ["create", "get", "list", "watch"]
+  - apiGroups: ["csi.storage.k8s.io"]
+    resources: ["csidrivers"]
+    verbs: ["create", "delete", "get", "list", "watch"]
+  - apiGroups: ["csi.storage.k8s.io"]
+    resources: ["csinodeinfos"]
+    verbs: ["get", "list", "watch"]
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-role-binding
+subjects:
+  - kind: ServiceAccount
+    name: csi-external-runner
+    namespace: kube-system
+roleRef:
+  kind: ClusterRole
+  name: external-runner
+  apiGroup: rbac.authorization.k8s.io
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: kube-system
+  name: external-runner-cfg
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "watch", "list", "delete", "update", "create"]
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-role-cfg
+  namespace: kube-system
+subjects:
+  - kind: ServiceAccount
+    name: csi-external-runner
+    namespace: kube-system
+roleRef:
+  kind: Role
+  name: external-runner-cfg
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  name: csi-cdsplugin
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: csi-cdsplugin
+  template:
+    metadata:
+      labels:
+        app: csi-cdsplugin
+    spec:
+      containers:
+        - args:
+            - --v=5
+            - --csi-address=$(ADDRESS)
+            - --kubelet-registration-path=$(ADDRESS)
+          env:
+            - name: ADDRESS
+              value: /var/lib/kubelet/plugins_registry/csi-cdsplugin/csi.sock
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+          image: hub.baidubce.com/cce/driver-registrar:latest-1.13
+          imagePullPolicy: Always
+          name: driver-registrar
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /var/lib/kubelet/plugins_registry/csi-cdsplugin
+              name: socket-dir
+            - mountPath: /registration
+              name: reg-dir
+        - args:
+            - --nodeid=$(NODE_ID)
+            - --endpoint=$(CSI_ENDPOINT)
+            - --v=5
+            - --drivername=csi-cdsplugin
+          env:
+            - name: NODE_ID
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+            - name: CSI_ENDPOINT
+              value: unix://var/lib/kubelet/plugins_registry/csi-cdsplugin/csi.sock
+          #          image: hub.baidubce.com/cce/cdsplugin:latest-1.13
+          image: hub.baidubce.com/jpaas-public/cdsplugin:v1.1.1.0
+          imagePullPolicy: Always
+          name: csi-cdsplugin
+          securityContext:
+            allowPrivilegeEscalation: true
+            capabilities:
+              add:
+                - SYS_ADMIN
+            privileged: true
+          volumeMounts:
+            - mountPath: /etc/kubernetes
+              name: cloud-config
+            - mountPath: /var/lib/kubelet/plugins_registry/csi-cdsplugin
+              name: socket-dir
+            - mountPath: /var/lib/kubelet/pods
+              mountPropagation: Bidirectional
+              name: pods-mount-dir
+            - mountPath: /data/kubelet/pods
+              mountPropagation: Bidirectional
+              name: pods-mount-dir-data
+            - mountPath: /sys
+              name: host-sys
+            - mountPath: /lib/modules
+              name: lib-modules
+              readOnly: true
+            - mountPath: /dev
+              name: host-dev
+      hostNetwork: true
+      restartPolicy: Always
+      serviceAccount: csi-external-runner
+      serviceAccountName: csi-external-runner
+      priorityClassName: system-node-critical
+      volumes:
+        - hostPath:
+            path: /etc/kubernetes
+            type: ""
+          name: cloud-config
+        - hostPath:
+            path: /var/lib/kubelet/plugins_registry/csi-cdsplugin
+            type: DirectoryOrCreate
+          name: reg-dir
+        - hostPath:
+            path: /var/lib/kubelet/pods
+            type: Directory
+          name: pods-mount-dir
+        - hostPath:
+            path: /data/kubelet/pods
+            type: Directory
+          name: pods-mount-dir-data
+        - hostPath:
+            path: /var/lib/kubelet/plugins_registry/csi-cdsplugin
+            type: DirectoryOrCreate
+          name: socket-dir
+        - hostPath:
+            path: /sys
+            type: ""
+          name: host-sys
+        - hostPath:
+            path: /lib/modules
+            type: ""
+          name: lib-modules
+        - hostPath:
+            path: /dev
+            type: ""
+          name: host-dev
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: csi-attacher-cds
+  namespace: kube-system
+  labels:
+    app: csi-attacher-cds
+spec:
+  selector:
+    app: csi-attacher-cds
+  clusterIP: None
+---
+kind: StatefulSet
+apiVersion: apps/v1beta1
+metadata:
+  name: csi-attacher-cds
+  namespace: kube-system
+spec:
+  serviceName: "csi-attacher-cds"
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: csi-attacher-cds
+    spec:
+      priorityClassName: system-cluster-critical
+      serviceAccount: csi-external-runner
+      containers:
+        - name: csi-attacher-cds
+          image: hub.baidubce.com/cce/csi-attacher:latest-1.13
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+            - "--leader-election"
+            - "--leader-election-namespace=$(MY_NAMESPACE)"
+            - "--leader-election-identity=$(MY_NAME)"
+          env:
+            - name: MY_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: MY_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: ADDRESS
+              value: /var/lib/kubelet/plugins_registry/csi-cdsplugin/csi.sock
+          imagePullPolicy: "Always"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/kubelet/plugins_registry/csi-cdsplugin
+      volumes:
+        - name: socket-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins_registry/csi-cdsplugin
+            type: DirectoryOrCreate
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: csi-provisioner-cds
+  namespace: kube-system
+  labels:
+    app: csi-provisioner-cds
+spec:
+  selector:
+    app: csi-provisioner-cds
+  clusterIP: None
+---
+kind: StatefulSet
+apiVersion: apps/v1beta1
+metadata:
+  name: csi-provisioner-cds
+  namespace: kube-system
+spec:
+  serviceName: "csi-provisioner-cds"
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: csi-provisioner-cds
+    spec:
+      priorityClassName: system-cluster-critical
+      serviceAccount: csi-external-runner
+      containers:
+        - name: csi-provisioner-cds
+          image: hub.baidubce.com/cce/csi-provisioner:latest-1.13
+          args:
+            - "--provisioner=csi-cdsplugin"
+            - "--csi-address=$(ADDRESS)"
+            - "--v=5"
+            - "--feature-gates=Topology=true"
+            - "--volume-name-prefix=pv"
+          env:
+            - name: ADDRESS
+              value: /var/lib/kubelet/plugins_registry/csi-cdsplugin/csi.sock
+          imagePullPolicy: "Always"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/kubelet/plugins_registry/csi-cdsplugin
+      volumes:
+        - name: socket-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins_registry/csi-cdsplugin
+            type: DirectoryOrCreate

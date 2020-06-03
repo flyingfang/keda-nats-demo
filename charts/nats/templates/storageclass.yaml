@@ -1,0 +1,14 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ .Values.store.volume.storageClass | default "nats-storage" }}
+  labels:
+    {{- include "nats.labels" . | nindent 4 }}
+provisioner: csi-cdsplugin
+parameters:
+  dynamicVolume: "true"       #需要为 true才会创建
+  cdsSizeInGB:  "10"          #对单个 storageClass能创建的 size限制
+  paymentTiming: "Prepaid"    #Prepaid or Postpaid
+  storageType: "hp1"          #支持std1 hp1 ssd
+  reservationLength: "3"      #Prepaid 模式下需要填写
+reclaimPolicy: Delete         #支持 Delete、Retain 默认值为 Delete
