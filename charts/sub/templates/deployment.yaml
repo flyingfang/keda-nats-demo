@@ -26,6 +26,8 @@ spec:
             "/nats-sub",
             "-s", "{{ .Values.args.natsEndpoint }}",
             "-c", "{{ .Values.args.clusterName }}",
+            "--durable", "{{ .Values.args.durableName }}",
+            "--qgroup", "{{ .Values.args.queueGroup }}",
             "{{ .Values.args.subject }}"
           ]
           resources:

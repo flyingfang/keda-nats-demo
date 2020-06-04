@@ -45,5 +45,7 @@ affinity: {}
 
 args:
   natsEndpoint: "my-nats:4222"
+  durableName: "ImDurable"
+  queueGroup: "demo-group"
   clusterName: "stan-demo"
   subject: "demo-test"

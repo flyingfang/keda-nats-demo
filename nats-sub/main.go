@@ -19,6 +19,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"time"
 
 	nats "github.com/nats-io/nats.go"
@@ -75,8 +76,8 @@ func main() {
 	flag.StringVar(&URL, "server", stan.DefaultNatsURL, "The nats server URLs (separated by comma)")
 	flag.StringVar(&clusterID, "c", "test-cluster", "The NATS Streaming cluster ID")
 	flag.StringVar(&clusterID, "cluster", "test-cluster", "The NATS Streaming cluster ID")
-	flag.StringVar(&clientID, "id", "stan-sub", "The NATS Streaming client ID to connect with")
-	flag.StringVar(&clientID, "clientid", "stan-sub", "The NATS Streaming client ID to connect with")
+	// flag.StringVar(&clientID, "id", "stan-sub", "The NATS Streaming client ID to connect with")
+	// flag.StringVar(&clientID, "clientid", "stan-sub", "The NATS Streaming client ID to connect with")
 	flag.BoolVar(&showTime, "t", false, "Display timestamps")
 	// Subscription options
 	flag.Uint64Var(&startSeq, "seq", 0, "Start at sequence no.")
@@ -115,7 +116,7 @@ func main() {
 		log.Fatal(err)
 	}
 	defer nc.Close()
-
+	clientID = strconv.FormatInt(time.Now().UnixNano(), 10)
 	sc, err := stan.Connect(clusterID, clientID, stan.NatsConn(nc),
 		stan.SetConnectionLostHandler(func(_ stan.Conn, reason error) {
 			log.Fatalf("Connection lost, reason: %v", reason)

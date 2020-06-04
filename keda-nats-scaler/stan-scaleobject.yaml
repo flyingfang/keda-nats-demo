@@ -5,17 +5,17 @@ metadata:
   labels:
     deploymentName: nats-sub
 spec:
-  pollingInterval: 10   # Optional. Default: 30 seconds
+  pollingInterval: 10  # Optional. Default: 30 seconds
   cooldownPeriod: 30   # Optional. Default: 300 seconds
   minReplicaCount: 0   # Optional. Default: 0
-  maxReplicaCount: 30  # Optional. Default: 100
+  maxReplicaCount: 3   # Optional. Default: 100
   scaleTargetRef:
-    deploymentName: gonuts-sub
+    deploymentName: nats-sub
   triggers:
     - type: stan
       metadata:
-        natsServerMonitoringEndpoint: "stan-nats-ss.stan.svc.cluster.local:8222"
-        queueGroup: "grp1"
+        natsServerMonitoringEndpoint: "my-nats:8222"
+        queueGroup: "demo-group"
         durableName: "ImDurable"
-        subject: "Test"
-        lagThreshold: "10"
+        subject: "demo-test"
+        lagThreshold: "1"
