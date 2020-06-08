@@ -17,10 +17,33 @@ nats-sub: nats subscriber demo
 $ kubectl apply -f cds-plugin/
 ```
 
-2.helm install nats charts
+2.install keda components
+duplicate from keda GitHub: [keda](https://github.com/kedacore/keda)
+
+```shell script
+$ kubectl apply -Rf ./keda
+```
+
+3.helm install nats charts
 
 ```shell script
 $ helm install my-nats charts/nats
 ```
 
-// TODO...
+4.helm install my publisher application
+
+```shell script
+$ helm install nats-pub charts/pub
+```
+
+5.helm install my subscriber application
+
+```shell script
+$ helm install nats-sub charts/sub
+```
+
+6.install keda nats scaler adapter
+
+```shell script
+$ kubectl apply -f keda-nats-scaler/
+```
